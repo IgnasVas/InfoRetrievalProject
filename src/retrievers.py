@@ -17,47 +17,50 @@ logger = get_logger()
 
 
 class BM25Retriever:
-    """BM25 sparse retriever - uses simple term-based scoring."""
+    """BM25 sparse retriever using rank_bm25 library."""
     
     def __init__(self):
         """Initialize BM25 retriever."""
+        from rank_bm25 import BM25Okapi
+        self.BM25Okapi = BM25Okapi
         self.k1 = config.get("retrieval.bm25.k1", 0.9)
         self.b = config.get("retrieval.bm25.b", 0.4)
-        self.corpus = None
+        self.bm25 = None
         self.doc_ids = None
         logger.debug(f"BM25Retriever initialized with k1={self.k1}, b={self.b}")
     
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple whitespace tokenization."""
+        return text.lower().split()
+    
     def build_index(self, corpus: List[Dict[str, str]]) -> None:
-        """Store corpus for BM25 retrieval."""
+        """Build BM25 index from corpus."""
         logger.info("Preparing BM25 index...")
-        self.corpus = corpus
         self.doc_ids = [doc['docno'] for doc in corpus]
+        
+        # Tokenize all documents
+        tokenized_corpus = [self._tokenize(doc.get('text', '')) for doc in corpus]
+        
+        # Build BM25 index with custom parameters
+        self.bm25 = self.BM25Okapi(tokenized_corpus, k1=self.k1, b=self.b)
+        
         logger.info(f"BM25 index ready for {len(corpus)} documents")
     
     def retrieve(self, query: str, top_k: int = 100) -> List[Tuple[str, float]]:
-        """Retrieve using simple BM25-like term overlap scoring."""
-        if self.corpus is None:
+        """Retrieve using BM25 ranking."""
+        if self.bm25 is None:
             raise RuntimeError("Index not built. Call build_index() first.")
         
-        import string
-        query_terms = query.lower().split()
-        # Remove punctuation from query terms
-        query_terms = [term.translate(str.maketrans('', '', string.punctuation)) for term in query_terms]
-        query_terms = [term for term in query_terms if term]  # Remove empty strings
-        
-        if not query_terms:
+        query_tokens = self._tokenize(query)
+        if not query_tokens:
             return [(self.doc_ids[i], 0.0) for i in range(min(top_k, len(self.doc_ids)))]
         
-        scores = []
-        for doc in self.corpus:
-            text = doc.get('text', '').lower()
-            # Simple term overlap scoring
-            score = sum(text.count(term) for term in query_terms)
-            scores.append(score)
+        scores = self.bm25.get_scores(query_tokens)
         
-        # Get top-k by score
-        indices = np.argsort(scores)[::-1][:top_k]
-        return [(self.doc_ids[i], float(scores[i])) for i in indices]
+        # Get top-k indices
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        
+        return [(self.doc_ids[i], float(scores[i])) for i in top_indices]
 
 
 class DenseRetriever:
