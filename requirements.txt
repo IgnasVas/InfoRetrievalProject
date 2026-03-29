@@ -1,0 +1,19 @@
+# Core dependencies for Information Retrieval Pipeline Study
+python-terrier>=0.10
+pyterrier>=1.0.0
+
+# Dense retrieval and reranking
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
+# Data processing and evaluation
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# Configuration management
+pyyaml>=6.0
+
+# Utilities
+tqdm>=4.65.0
+requests>=2.31.0
