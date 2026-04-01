@@ -4,8 +4,7 @@ Reranker implementation using BERT cross-encoder models.
 
 import sys
 from pathlib import Path
-from typing import List, Tuple
-import numpy as np
+from typing import List, Tuple, Dict
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -27,7 +26,10 @@ class CrossEncoderReranker:
             model_name: Cross-encoder model name (default from config).
         """
         if model_name is None:
-            model_name = config.get("retrieval.reranking.model", "cross-encoder-ms-marco-MiniLM-L6-v2")
+            model_name = config.get(
+                "retrieval.reranking.model",
+                "cross-encoder/ms-marco-MiniLM-L6-v2"
+            )
         
         self.model_name = model_name
         self.device = config.get("retrieval.reranking.device", "cuda")
@@ -36,7 +38,9 @@ class CrossEncoderReranker:
         # Lazy load model
         self.model = None
         
-        logger.debug(f"CrossEncoderReranker initialized with model={model_name}, device={self.device}")
+        logger.debug(
+            f"CrossEncoderReranker initialized with model={model_name}, device={self.device}"
+        )
     
     def _load_model(self):
         """Load cross-encoder model."""
@@ -53,6 +57,7 @@ class CrossEncoderReranker:
         self,
         query: str,
         candidates: List[Tuple[str, float]],
+        corpus_map: Dict[str, str],
         top_k: int = None
     ) -> List[Tuple[str, float]]:
         """
@@ -61,6 +66,7 @@ class CrossEncoderReranker:
         Args:
             query: Query string.
             candidates: List of (doc_id, initial_score) tuples from first-stage retriever.
+            corpus_map: Mapping from doc_id to document text.
             top_k: Return top-k reranked results. If None, return all candidates.
         
         Returns:
@@ -71,11 +77,14 @@ class CrossEncoderReranker:
         
         self._load_model()
         
-        # Extract doc IDs and original scores
+        # Extract doc IDs
         doc_ids = [doc_id for doc_id, _ in candidates]
         
-        # Create query-document pairs for cross-encoder
-        pairs = [[query, doc_id] for doc_id in doc_ids]
+        # Create query-document_text pairs for cross-encoder
+        pairs = [
+            [query, corpus_map.get(doc_id, "")]
+            for doc_id in doc_ids
+        ]
         
         # Score pairs in batches
         scores = self.model.predict(
