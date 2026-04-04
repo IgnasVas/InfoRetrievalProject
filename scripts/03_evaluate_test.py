@@ -12,7 +12,6 @@ from typing import Dict, List, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.utils import get_logger, save_json
-from src.config import config
 from src.pipeline import create_pipelines
 from src.evaluation import evaluate_query, aggregate_metrics
 from src.query_types import classify_query_type
@@ -73,7 +72,7 @@ def main():
     queries = dict(list(queries.items())[:5])
     candidate_depths = [20]
 
-    logger.info(f"Running {len(pipelines)} pipeline(s) on {len(queries)} query/queries...")
+    logger.info(f"Running {len(pipelines)} pipeline(s) on {len(queries)} queries...")
 
     all_results = {}
 

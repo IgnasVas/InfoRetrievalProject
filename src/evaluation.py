@@ -115,7 +115,7 @@ def ndcg(
 
 def mrr(predicted: List[str], relevant: List[str], k: int = 10) -> float:
     """
-    Compute Reciprocal Rank.
+    Compute Reciprocal Rank for a single query.
 
     Args:
         predicted: List of predicted document IDs, ranked by relevance.
@@ -123,7 +123,7 @@ def mrr(predicted: List[str], relevant: List[str], k: int = 10) -> float:
         k: Cutoff for MRR.
 
     Returns:
-        MRR@k score.
+        Reciprocal Rank score (0-1). Mean is computed across queries in aggregate_metrics.
     """
     relevant_set = set(relevant)
 
