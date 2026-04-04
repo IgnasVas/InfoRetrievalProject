@@ -18,49 +18,71 @@ logger = get_logger()
 
 class BM25Retriever:
     """BM25 sparse retriever using rank_bm25 library."""
-    
+
     def __init__(self):
         """Initialize BM25 retriever."""
         from rank_bm25 import BM25Okapi
         self.BM25Okapi = BM25Okapi
         self.k1 = config.get("retrieval.bm25.k1", 0.9)
         self.b = config.get("retrieval.bm25.b", 0.4)
+        self.use_stemming = config.get("retrieval.bm25.tokenization.use_stemming", True)
+        self.remove_stopwords = config.get("retrieval.bm25.tokenization.remove_stopwords", True)
+        self.min_token_length = config.get("retrieval.bm25.tokenization.min_token_length", 3)
         self.bm25 = None
         self.doc_ids = None
-        logger.debug(f"BM25Retriever initialized with k1={self.k1}, b={self.b}")
-    
+
+        self.stemmer = None
+        self.stopwords = None
+        if self.use_stemming:
+            from nltk.stem import PorterStemmer
+            self.stemmer = PorterStemmer()
+        if self.remove_stopwords:
+            from nltk.corpus import stopwords
+            self.stopwords = set(stopwords.words("english"))
+
+        logger.debug(f"BM25Retriever initialized with k1={self.k1}, b={self.b}, stemming={self.use_stemming}, stopwords={self.remove_stopwords}")
+
     def _tokenize(self, text: str) -> List[str]:
-        """Simple whitespace tokenization."""
-        return text.lower().split()
-    
+        """Tokenize text with optional stemming and stopword removal."""
+        tokens = text.lower().split()
+
+        if self.remove_stopwords and self.stopwords:
+            tokens = [t for t in tokens if t not in self.stopwords]
+
+        if self.use_stemming and self.stemmer:
+            tokens = [self.stemmer.stem(t) for t in tokens]
+
+        tokens = [t for t in tokens if len(t) >= self.min_token_length]
+
+        return tokens
+
     def build_index(self, corpus: List[Dict[str, str]]) -> None:
         """Build BM25 index from corpus."""
         logger.info("Preparing BM25 index...")
         self.doc_ids = [doc['docno'] for doc in corpus]
-        
-        # Tokenize all documents
+
         tokenized_corpus = [self._tokenize(doc.get('text', '')) for doc in corpus]
-        
-        # Build BM25 index with custom parameters
+
         self.bm25 = self.BM25Okapi(tokenized_corpus, k1=self.k1, b=self.b)
-        
+
         logger.info(f"BM25 index ready for {len(corpus)} documents")
-    
+
     def retrieve(self, query: str, top_k: int = 100) -> List[Tuple[str, float]]:
         """Retrieve using BM25 ranking."""
         if self.bm25 is None:
             raise RuntimeError("Index not built. Call build_index() first.")
-        
+
         query_tokens = self._tokenize(query)
         if not query_tokens:
+            logger.warning(f"Query produced no tokens after preprocessing: '{query}'")
             return [(self.doc_ids[i], 0.0) for i in range(min(top_k, len(self.doc_ids)))]
-        
+
         scores = self.bm25.get_scores(query_tokens)
-        
-        # Get top-k indices
+
         top_indices = np.argsort(scores)[::-1][:top_k]
-        
+
         return [(self.doc_ids[i], float(scores[i])) for i in top_indices]
+
 
 
 class DenseRetriever:

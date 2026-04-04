@@ -1,5 +1,6 @@
 """
-Run all IR pipeline experiments and save results.
+Run IR pipeline experiments and save results.
+test version: runs only a small subset for quick testing.
 """
 
 import sys
@@ -9,10 +10,9 @@ import pickle
 from typing import Dict, List, Tuple
 import time
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.utils import get_logger, save_json
-from src.config import config
 from src.pipeline import create_pipelines
 from src.evaluation import evaluate_query, aggregate_metrics
 from src.query_types import classify_query_type
@@ -23,21 +23,23 @@ logger = get_logger()
 
 
 def main():
-    """Run experiments."""
-    logger.info("Starting IR pipeline experiments...")
+    """Run a quick test."""
+    logger.info("Starting IR pipeline test...")
 
     corpus, queries, qrels = load_data()
 
     all_pipelines = create_pipelines()
-    pipelines = all_pipelines
+    pipelines = [all_pipelines[0]]
 
     for p in pipelines:
         p.set_corpus(corpus)
 
-    logger.info(f"Running {len(pipelines)} pipelines on {len(queries)} queries...")
+    queries = dict(list(queries.items())[:5])
+    candidate_depths = [20]
+
+    logger.info(f"Running {len(pipelines)} pipeline(s) on {len(queries)} queries...")
 
     all_results = {}
-    candidate_depths = config.get("candidate_depths", [20, 50, 100])
 
     for pipeline in pipelines:
         logger.info(f"\nPipeline: {pipeline.name}")
@@ -109,27 +111,12 @@ def main():
 
         all_results[pipeline.name] = pipeline_results
 
-    results_dir = Path(__file__).parent.parent / "results"
+    project_root = Path(__file__).resolve().parent.parent
+    results_dir = project_root / "results"
     results_dir.mkdir(exist_ok=True)
 
-    save_json(all_results, results_dir / "results.json")
-    logger.info(f"\nResults saved to {results_dir / 'results.json'}")
-
-    logger.info("\n" + "=" * 60)
-    logger.info("SUMMARY")
-    logger.info("=" * 60)
-
-    for pipeline_name, results in all_results.items():
-        logger.info(f"\n{pipeline_name}:")
-        for depth_key, data in results.items():
-            metrics = data["metrics"]
-            if metrics:
-                logger.info(
-                    f"  {depth_key}: "
-                    f"nDCG@10={metrics.get('ndcg@10_mean', 0):.4f}, "
-                    f"Recall@10={metrics.get('recall@10_mean', 0):.4f}, "
-                    f"Throughput={data.get('queries_per_sec', 0):.2f} q/s"
-                )
+    save_json(all_results, results_dir / "results_test.json")
+    logger.info(f"\nResults saved to {results_dir / 'results_test.json'}")
 
 
 if __name__ == "__main__":
