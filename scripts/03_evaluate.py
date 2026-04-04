@@ -7,6 +7,7 @@ from pathlib import Path
 import json
 import pickle
 from typing import Dict, List, Tuple
+import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -15,57 +16,10 @@ from src.config import config
 from src.pipeline import create_pipelines
 from src.evaluation import evaluate_query, aggregate_metrics
 from src.query_types import classify_query_type
+from src.experiment_utils import load_data, aggregate_by_query_type
 
 
 logger = get_logger()
-
-
-def load_data() -> Tuple[List, Dict, Dict]:
-    """Load preprocessed ANTIQUE data."""
-    processed_dir = Path(__file__).parent.parent / "data" / "processed"
-
-    with open(processed_dir / "corpus.pkl", "rb") as f:
-        corpus = pickle.load(f)
-
-    with open(processed_dir / "queries_test.json", "r", encoding="utf-8") as f:
-        queries = json.load(f)
-
-    with open(processed_dir / "qrels_test.json", "r", encoding="utf-8") as f:
-        qrels = json.load(f)
-
-    logger.info(f"Loaded: {len(corpus)} docs, {len(queries)} queries, {len(qrels)} qrels")
-    return corpus, queries, qrels
-
-
-def aggregate_by_query_type(query_details: Dict[str, Dict]) -> Dict[str, Dict[str, float]]:
-    """
-    Aggregate metrics per query type.
-
-    Args:
-        query_details: Dictionary with query_id -> {
-            "query": str,
-            "query_type": str,
-            "metrics": Dict[str, float]
-        }
-
-    Returns:
-        Dictionary with query_type -> aggregated metrics.
-    """
-    grouped = {}
-
-    for query_id, data in query_details.items():
-        query_type = data["query_type"]
-        metrics = data["metrics"]
-
-        if query_type not in grouped:
-            grouped[query_type] = {}
-
-        grouped[query_type][query_id] = metrics
-
-    return {
-        query_type: aggregate_metrics(type_metrics)
-        for query_type, type_metrics in grouped.items()
-    }
 
 
 def main():
@@ -95,10 +49,15 @@ def main():
             query_metrics = {}
             query_details = {}
             successful = 0
+            total_retrieval_time = 0.0
 
             for query_id, query_text in queries.items():
                 try:
+                    start_time = time.perf_counter()
                     predicted = pipeline.retrieve(query_text, candidate_depth=depth)
+                    retrieval_time = time.perf_counter() - start_time
+                    total_retrieval_time += retrieval_time
+
                     relevant_dict = {
                         doc_id: int(rel_score)
                         for doc_id, rel_score in qrels.get(query_id, {}).items()
@@ -111,7 +70,8 @@ def main():
                     query_details[query_id] = {
                         "query": query_text,
                         "query_type": query_type,
-                        "metrics": metrics
+                        "metrics": metrics,
+                        "retrieval_time_ms": retrieval_time * 1000
                     }
 
                     successful += 1
@@ -125,12 +85,18 @@ def main():
             pipeline_results[f"depth_{depth}"] = {
                 "metrics": aggregated,
                 "by_query_type": by_query_type,
-                "successful_queries": successful
+                "successful_queries": successful,
+                "total_time_sec": total_retrieval_time,
+                "avg_time_per_query_ms": (total_retrieval_time / successful * 1000) if successful > 0 else 0,
+                "queries_per_sec": successful / total_retrieval_time if total_retrieval_time > 0 else 0
             }
 
             if aggregated:
                 logger.info(f"    nDCG@10: {aggregated.get('ndcg@10_mean', 0):.4f}")
                 logger.info(f"    Recall@10: {aggregated.get('recall@10_mean', 0):.4f}")
+                logger.info(f"    Precision@10: {aggregated.get('precision@10_mean', 0):.4f}")
+                logger.info(f"    MAP@10: {aggregated.get('map@10_mean', 0):.4f}")
+                logger.info(f"    Throughput: {pipeline_results[f'depth_{depth}']['queries_per_sec']:.2f} q/s")
 
             if by_query_type:
                 logger.info("    Query type performance:")
@@ -161,7 +127,8 @@ def main():
                 logger.info(
                     f"  {depth_key}: "
                     f"nDCG@10={metrics.get('ndcg@10_mean', 0):.4f}, "
-                    f"Recall@10={metrics.get('recall@10_mean', 0):.4f}"
+                    f"Recall@10={metrics.get('recall@10_mean', 0):.4f}, "
+                    f"Throughput={data.get('queries_per_sec', 0):.2f} q/s"
                 )
 
 

@@ -11,6 +11,10 @@ retrieval:
     k1: 0.9
     b: 0.4
     fields: null  # Use default fields
+    tokenization:
+      use_stemming: true
+      remove_stopwords: true
+      min_token_length: 3
   dense:
     model: "all-MiniLM-L6-v2"
     batch_size: 32
@@ -21,6 +25,7 @@ retrieval:
     batch_size: 16
     device: "cpu"
     top_k: 1000  # Score all retrieved candidates
+    candidate_multiplier: 2  # Fetch top_k * multiplier candidates before reranking
 
 # Pipeline configuration
 pipelines:
@@ -38,8 +43,10 @@ candidate_depths: [20, 50, 100]
 
 # Evaluation metrics
 evaluation:
-  metrics: ["recall", "ndcg", "mrr"]
+  metrics: ["recall", "precision", "map", "ndcg", "mrr"]
   cutoffs: [10, 100]  # Compute @10 and @100
+  binary_relevance_threshold: 3  # For ANTIQUE: rel >= 3 is relevant
+  track_timing: true  # Enable per-query timing instrumentation
 
 # Output configuration
 output:

@@ -36,6 +36,54 @@ def recall_at_k(predicted: List[str], relevant: List[str], k: int = 10) -> float
     return len(predicted_at_k & relevant_set) / len(relevant_set)
 
 
+def precision_at_k(predicted: List[str], relevant: List[str], k: int = 10) -> float:
+    """
+    Compute Precision@k.
+
+    Args:
+        predicted: List of predicted document IDs, ranked by relevance.
+        relevant: List of relevant document IDs.
+        k: Cutoff for precision.
+
+    Returns:
+        Precision@k score.
+    """
+    if k == 0:
+        return 0.0
+
+    predicted_at_k = set(predicted[:k])
+    relevant_set = set(relevant)
+
+    return len(predicted_at_k & relevant_set) / k
+
+
+def mean_average_precision(predicted: List[str], relevant: List[str], k: int = 100) -> float:
+    """
+    Compute Mean Average Precision (MAP@k).
+
+    Args:
+        predicted: List of predicted document IDs, ranked by relevance.
+        relevant: List of relevant document IDs.
+        k: Cutoff for MAP.
+
+    Returns:
+        MAP@k score.
+    """
+    if not relevant:
+        return 0.0
+
+    relevant_set = set(relevant)
+    score = 0.0
+    num_hits = 0
+
+    for i, doc_id in enumerate(predicted[:k]):
+        if doc_id in relevant_set:
+            num_hits += 1
+            score += num_hits / (i + 1)
+
+    return score / len(relevant_set)
+
+
 def dcg(predicted: List[str], relevant_dict: Dict[str, float], k: int = 10) -> float:
     """
     Compute Discounted Cumulative Gain for ANTIQUE.
@@ -167,6 +215,8 @@ def evaluate_query(
 
     for k in cutoffs:
         metrics[f"recall@{k}"] = recall_at_k(predicted_docs, relevant_docs, k)
+        metrics[f"precision@{k}"] = precision_at_k(predicted_docs, relevant_docs, k)
+        metrics[f"map@{k}"] = mean_average_precision(predicted_docs, relevant_docs, k)
         metrics[f"ndcg@{k}"] = ndcg(predicted_docs, relevant_dict, k)
         metrics[f"mrr@{k}"] = mrr(predicted_docs, relevant_docs, k)
 
