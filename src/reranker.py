@@ -92,10 +92,15 @@ class CrossEncoderReranker:
             batch_size=self.batch_size,
             show_progress_bar=False
         )
-        
+
+        # Normalize scores using sigmoid to handle potentially negative scores
+        # from MS MARCO models and map to [0, 1] range
+        import numpy as np
+        scores = 1 / (1 + np.exp(-scores))
+
         # Create result list with reranked scores
         results = list(zip(doc_ids, scores))
-        
+
         # Sort by score descending
         results.sort(key=lambda x: x[1], reverse=True)
         

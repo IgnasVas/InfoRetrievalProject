@@ -6,14 +6,12 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple
 from abc import ABC, abstractmethod
-import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils import get_logger
 from src.retrievers import BM25Retriever, DenseRetriever
 from src.reranker import CrossEncoderReranker
-from src.config import config
 
 
 logger = get_logger()
@@ -83,57 +81,59 @@ class DensePipeline(Pipeline):
 
 class BM25RerankerPipeline(Pipeline):
     """BM25 retrieval followed by cross-encoder reranking."""
-
+    
     def __init__(self):
         super().__init__("bm25_reranker")
         self.retriever = BM25Retriever()
         self.reranker = CrossEncoderReranker()
         self.corpus_map = {}
-        self.multiplier = config.get("retrieval.reranking.candidate_multiplier", 2)
-
+    
     def set_corpus(self, corpus: List[Dict[str, str]]) -> None:
         super().set_corpus(corpus)
         self.retriever.build_index(corpus)
         self.corpus_map = {doc["docno"]: doc.get("text", "") for doc in corpus}
-
+    
     def retrieve(self, query: str, candidate_depth: int = 100) -> List[Tuple[str, float]]:
-        candidates = self.retriever.retrieve(query, top_k=int(candidate_depth * self.multiplier))
-
+        # First stage: BM25 retrieval
+        candidates = self.retriever.retrieve(query, top_k=candidate_depth * 2)
+        
+        # Second stage: reranking with document text
         reranked = self.reranker.rerank(
             query,
             candidates,
             self.corpus_map,
             top_k=candidate_depth
         )
-
+        
         return reranked
 
 
 class DenseRerankerPipeline(Pipeline):
     """Dense retrieval followed by cross-encoder reranking."""
-
+    
     def __init__(self):
         super().__init__("dense_reranker")
         self.retriever = DenseRetriever()
         self.reranker = CrossEncoderReranker()
         self.corpus_map = {}
-        self.multiplier = config.get("retrieval.reranking.candidate_multiplier", 2)
-
+    
     def set_corpus(self, corpus: List[Dict[str, str]]) -> None:
         super().set_corpus(corpus)
         self.retriever.build_index(corpus)
         self.corpus_map = {doc["docno"]: doc.get("text", "") for doc in corpus}
-
+    
     def retrieve(self, query: str, candidate_depth: int = 100) -> List[Tuple[str, float]]:
-        candidates = self.retriever.retrieve(query, top_k=int(candidate_depth * self.multiplier))
-
+        # First stage: dense retrieval
+        candidates = self.retriever.retrieve(query, top_k=candidate_depth * 2)
+        
+        # Second stage: reranking with document text
         reranked = self.reranker.rerank(
             query,
             candidates,
             self.corpus_map,
             top_k=candidate_depth
         )
-
+        
         return reranked
 
 
